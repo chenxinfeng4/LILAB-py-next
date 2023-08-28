@@ -1,12 +1,4 @@
 #!/bin/bash
-# /home/liying_lab/chenxinfeng/ml-project/LILAB-py/lilab/multiview_scripts_dev/p_calibration.sh xxx.mp4 carl
-'
-ffmpeg -i 11.avi -i 22.avi -i 33.avi -i 44.avi -i 55.avi -i 66.avi -filter_complex "\
-    [0:v][1:v][2:v][3:v][4:v][5:v]xstack=inputs=6:layout=0_0|w0_0|w0+w0_0|0_h0|w0_h0|w0+w0_h0" \
-    -r 30 -c:v hevc_nvenc -b:v 8M -y 1_6grid.mp4
-'
-
-
 vfile_full=/mnt/liying.cibr.ac.cn_Data_Temp/marmoset_camera6/20230824/ball_vid1_c.mp4
 setupname=zyy  # ana bob carl, 3套多相机设备的标志
 config="/home/liying_lab/chenxinfeng/DATA/mmpose/res50_coco_ball_512x512_ZYY.py"
@@ -43,4 +35,9 @@ python -m lilab.multiview_scripts_dev.p2_calibpkl_refine_byglobal $vfile.calibpk
 python -m lilab.multiview_scripts_dev.s4_matpkl2matcalibpkl $vfile.matpkl $vfile.recalibpkl
 
 python -m lilabnext.multiview_zyy.s5_show_calibpkl2video $vfile.matcalibpkl
- 
+
+# 7. 确定无误后，替换原来的 calibpkl
+mv $vfile.recalibpkl $vfile.calibpkl
+
+# 8. 导出为 matlab 格式，用于 label3D
+python -m lilab.dannce.s1_ball2mat $vfile.calibpkl
