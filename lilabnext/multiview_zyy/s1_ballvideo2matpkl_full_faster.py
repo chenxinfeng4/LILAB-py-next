@@ -7,7 +7,6 @@ import tqdm
 import torch
 import pickle
 import mmcv
-# import lilab.cvutils.map_multiprocess_cuda as mmap_cuda
 import ffmpegcv
 from torch2trt import TRTModule
 import itertools
@@ -20,7 +19,7 @@ from lilab.multiview_scripts_dev.s1_ballvideo2matpkl_full_realtimecam import (
 )
 import os.path as osp
 import glob
-import lilab.cvutils.map_multiprocess_cuda as mmap_cuda
+# import lilab.cvutils.map_multiprocess_cuda as mmap_cuda
 import warnings
 from lilabnext.multiview_zyy.video_set_reader import VideoSetReader
 
@@ -50,7 +49,6 @@ class DataSet:
             yield img_NCHW, img_preview
 
 
-# class MyWorker(mmap_cuda.Worker):
 class MyWorker():
     def __init__(self):
         super().__init__()
