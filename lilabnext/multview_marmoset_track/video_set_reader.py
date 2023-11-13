@@ -65,6 +65,56 @@ class VideoSetReader:
         else:
             return ret, None
 
+class StreamRTSetReader:
+    def __init__(self, video_files:list, camsize_wh:list,*args, **kwargs):
+        nvideo = len(video_files)
+        assert nvideo>=2, 'nvideo should be >=2'
+        print('video_files found OK:')
+
+        self.vid_list = [ffmpegcv.VideoReaderStreamRT(f, *args, camsize_wh=camsize_wh,**kwargs)
+                            for f in video_files]
+        self.iframe = -1
+        self._isopen = True
+        self.count = None
+        self.pix_fmt = self.vid_list[0].pix_fmt
+        out_numpy_shapes = [vid.out_numpy_shape for vid in self.vid_list]
+        if set(out_numpy_shapes):
+            self.out_numpy_shape = (nvideo, *out_numpy_shapes[0])
+        else:
+            self.out_numpy_shape = None
+
+    def release(self):
+        self._isopen = False
+        for vid in self.vid_list:
+            vid.release()
+
+    def __exit__(self, type, value, traceback):
+        self.release()
+    
+    def __iter__(self):
+        return self
+
+    def __len__(self):
+        return None
+    
+    def __next__(self):
+        ret, img = self.read()
+        if ret:
+            return img
+        else:
+            raise StopIteration
+
+    def read(self):
+        rets, views = zip(*[vid.read() for vid in self.vid_list])
+        ret = all(rets)
+        if ret:
+            self.iframe += 1
+            if self.out_numpy_shape:
+                views = np.stack(views, axis=0)
+            return ret, views
+        else:
+            return ret, None
+        
 
 class VideoSetCanvasReader(FFmpegReader):
     def __init__(self, video_first_file:str, nvideo = 6, resize: tuple=None, pix_fmt='bgr24'):
@@ -76,7 +126,7 @@ class VideoSetCanvasReader(FFmpegReader):
         self.pannel_width = self.vid_list[0].width
         self.pannel_height = self.vid_list[0].height
         self.origin_width = self.pannel_width * 3
-        self.origin_height = self.pannel_height * 2
+        self.origin_height = self.pannel_height * 1
         self.count = min([len(vid) for vid in self.vid_list])
         assert set([vid.fps for vid in self.vid_list])=={self.fps}, 'fps not same'
         self.width, self.height = resize if resize else (self.origin_width, self.origin_height)
@@ -86,9 +136,8 @@ class VideoSetCanvasReader(FFmpegReader):
         self.ffmpeg_cmd = (
             f'ffmpeg -loglevel warning '
             f' -i {video_files[0]} -i {video_files[1]} -i {video_files[2]} '
-            f' -i {video_files[3]} -i {video_files[4]} -i {video_files[5]} '
             f' -filter_complex "'
-            '[0:v][1:v][2:v][3:v][4:v][5:v]xstack=inputs=6:layout=0_0|w0_0|w0+w0_0|0_h0|w0_h0|w0+w0_h0'
+            '[0:v][1:v][2:v]xstack=inputs=3:layout=0_0|w0_0|w0+w0_0'
             f'{resize_opt}" '
             f' -pix_fmt {pix_fmt} -r {self.fps} -f rawvideo pipe:'
         )

@@ -20,11 +20,11 @@ square_size = 20.0
 
 # %%
 def convert(vfile, setupname, board_size, square_size):
-    crop_xywh_l = get_view_xywh_wrapper(setupname)
-    vid = VideoSetReader(vfile, nvideo=len(crop_xywh_l))
+    intrinces_dict = get_json_wrapper(setupname)[1]
+    nview = len(intrinces_dict)
+    vid = VideoSetReader(vfile, nvideo=nview)
     ret, img = vid.read()
     assert ret, "Failed to read frame {}".format(0)
-    intrinces_dict = get_json_wrapper(setupname)[1]
 
     # get the crop image by crop_xywh
     img_crop_l = img
