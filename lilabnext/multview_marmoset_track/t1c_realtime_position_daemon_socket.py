@@ -3,7 +3,6 @@
 import socketserver
 from .msg_file_io import read_msg, read_calibpkl_msg, read_com2d, read_com2d_ba
 
-HOST, PORT = "127.0.0.1", 20169
 HOST, PORT = "0.0.0.0", 8090
 
 def greeting():
@@ -73,6 +72,12 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             print(e)
         print('Closed a request')
 
+def serve_forever():
+    with ThreadedTCPServer((HOST, PORT), MyTCPHandler) as server:
+        # Activate the server; this will keep running until you
+        # interrupt the program with Ctrl-C
+        print(f'Running realtime position daemon. in {HOST}:{PORT}')
+        server.serve_forever()
 
 if __name__ == "__main__":
     # Create the server, binding to localhost on port 9999

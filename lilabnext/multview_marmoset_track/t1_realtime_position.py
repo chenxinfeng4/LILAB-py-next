@@ -11,18 +11,17 @@ from multiview_calib.calibpkl_predict import CalibPredict
 from torch2trt.torch2trt import torch_dtype_from_trt
 from lilab.multiview_scripts_dev.comm_functions import get_max_preds_gpu
 from lilab.multiview_scripts_dev.s1_ballvideo2matpkl_full_realtimecam import (
-    mid_gpu, pre_cpu, findcheckpoint_trt
+    mid_gpu, pre_cpu
 )
-from lilab.dannce_realtime.com3d_realtime import post_cpu
 import ffmpegcv
-import multiprocessing
-from multiprocessing import Array, Queue, Lock
-import time
+import threading
 from .s1_ballvideo2matpkl_full_faster import DataSet
 from .video_set_reader import StreamRTSetReader
 from .msg_file_io import write_msg, write_calibpkl_msg
+from lilabnext.multview_marmoset_track.t1c_realtime_position_daemon_socket import serve_forever
+from ffmpegcv.ffmpeg_noblock import ReadLiveLast
 
-gpu_id = 2
+gpu_id = 0
 
 
 def show_com3d(*args):
@@ -32,8 +31,52 @@ rtsp_streams = ['rtsp://admin:2019Cibr@10.50.5.252:8091/Streaming/Channels/102',
                 'rtsp://admin:2019Cibr@10.50.5.252:8092/Streaming/Channels/102',
                 'rtsp://admin:2019Cibr@10.50.5.252:8093/Streaming/Channels/102']
 
+
+def post_cpu(heatmap, reverse_to_src_index, calibobj:CalibPredict):
+    assert calibobj is not None
+    keypoints_xy_origin, keypoints_p = get_max_preds_gpu(heatmap)
+    keypoints_xy = reverse_to_src_index(keypoints_xy_origin) #nview,nanimal,2
+    keypoints_p = np.squeeze(keypoints_p) #nview,nanimal
+    # thr
+    thr = 0.4
+    indmiss = keypoints_p < thr
+    keypoints_xyp = np.concatenate([keypoints_xy, keypoints_p[:,None,None]], axis=-1)
+    keypoints_xy[indmiss] = np.nan
+
+    # ba
+    keypoints_xyz_ba = calibobj.p2d_to_p3d(keypoints_xy)  #nanimal, 3
+    isnan = np.isnan(keypoints_xyz_ba)
+    if np.any(isnan):
+        keypoints_xyz_ba[isnan] = calibobj.last_keypoints_xyz_ba[isnan]
+    calibobj.last_keypoints_xyz_ba = keypoints_xyz_ba
+    keypoints_xy_ba = calibobj.p3d_to_p2d(keypoints_xyz_ba) #nview, nanimal, 2
+    return keypoints_xyz_ba, keypoints_xy_ba, keypoints_xy, keypoints_xyp
+
+
+class DataSet: 
+    def __init__(self, rtsp_streams, camsize_wh, pix_fmt):
+        out_numpy_shape = (len(rtsp_streams), camsize_wh[1], camsize_wh[0], 3)
+        self.coord_NCHW_idx_ravel = np.zeros(out_numpy_shape, dtype=np.uint8).transpose(0,3,1,2)
+        self.vid = [ffmpegcv.VideoCaptureStreamRT(rtsp_streams[0], camsize_wh=camsize_wh, pix_fmt=pix_fmt)]
+        self.vid.extend([ReadLiveLast(ffmpegcv.VideoCaptureStreamRT, r, camsize_wh=camsize_wh, pix_fmt=pix_fmt)
+                        for r in rtsp_streams[1:]])
+        self.input_trt_shape = self.coord_NCHW_idx_ravel.shape
+    
+    def __iter__(self):
+        while True:
+            rets, imgs = [], []
+            for v in self.vid:
+                ret, img = v.read()
+                rets.append(ret); imgs.append(img)
+            assert all(rets)
+            img_NHWC = np.array(imgs)
+            img_preview = np.zeros((800,1280,3), dtype=np.uint8)
+            img_NCHW = img_NHWC.transpose(0,3,1,2)
+            yield img_NCHW, img_preview
+
+
 class MyWorker:
-    def __init__(self, config:str, rtsp_streams:str, checkpoint:str, ballcalib:str):
+    def __init__(self, rtsp_streams:str, checkpoint:str, ballcalib:str):
         super().__init__()
         self.cuda = getattr(self, 'cuda', gpu_id)
         self.checkpoint = checkpoint
@@ -43,44 +86,20 @@ class MyWorker:
         
         preview_ipannel = 0
         self.preview_ipannel = preview_ipannel
-        self.vidout = ffmpegcv.VideoWriterNV('/mnt/liying.cibr.ac.cn_Data_Temp/multiview_9/chenxf/out_com3d.mp4',
-                                             codec = 'h264', fps=30)
         vid = StreamRTSetReader(rtsp_streams, camsize_wh=camsize, pix_fmt='rgb24')
 
         self.video_file = rtsp_streams
         self.vid = vid
         self.camsize = camsize
         self.canvas_hw = (camsize[1], camsize[0])
-        cfg = mmcv.Config.fromfile(config)
-        self.num_joints = cfg.data_cfg['num_joints']
-        self.dataset = DataSet(self.vid)
+        self.num_joints = 1
+        self.dataset = DataSet(rtsp_streams, camsize_wh=camsize, pix_fmt='rgb24')
         self.dataset.reverse_to_src_index = lambda x: x
 
         self.calibobj.last_keypoints_xyz_ba = np.zeros((self.num_joints, 3))
         self.dataset_iter = iter(self.dataset)
-        self.NFRAME = 10
-        self.mem_canvas_img = camsize[0] * camsize[1]
-        self.mem_joints_3d = self.num_joints * 3 * 4 #3D, np.float32
-        self.mem_iframe = 4 #np.int32
-        # self.np_array = np.frombuffer(self.shared_array.get_obj(), dtype=np.uint8).reshape((self.NFRAME, -1))
-        # self.np_array_canvas_img = self.np_array[:, :self.mem_canvas_img]
-        # self.np_array_joints_3d = self.np_array[:, self.mem_canvas_img: self.mem_canvas_img + self.mem_joints_3d]
-        # self.np_array_iframe = self.np_array[:, self.mem_canvas_img + self.mem_joints_3d: self.mem_canvas_img + self.mem_joints_3d + self.mem_iframe]
         print("Well setup VideoCapture")
     
-    def encode_array(self, iframe:int, canvas:np.array, kpt_xyz:np.array):
-        iframe += self.NFRAME
-        data_id = (iframe+self.NFRAME) % self.NFRAME
-        with self.lock:
-            self.np_array_canvas_img[data_id][:] = canvas.ravel().view(np.uint8)
-            self.np_array_joints_3d[data_id][:] = kpt_xyz.ravel().view(np.uint8)
-            self.np_array_iframe[data_id][:] = np.int32([iframe]).view(np.uint8)
-
-        if self.q.full():
-            self.q.get()
-            # print('Droping')
-        self.q.put(data_id)
-
     def compute(self):
         dataset, dataset_iter = self.dataset, self.dataset_iter
         count_range = itertools.count()
@@ -100,36 +119,27 @@ class MyWorker:
 
             pbar = tqdm.tqdm(count_range, desc='loading')
             for iframe, _ in enumerate(count_range, start=-1):
+                img_NCHW, img_preview = pre_cpu(dataset_iter)
                 pbar.update(1)
                 heatmap_wait = mid_gpu(trt_model, img_NCHW, input_dtype)
-                img_NCHW_next, img_preview_next = pre_cpu(dataset_iter)
                 torch.cuda.current_stream().synchronize()
                 heatmap = heatmap_wait
                 if iframe>-1: 
                     keypoints_xyz_ba, keypoints_xy_ba, keypoints_xy, keypoints_xyp = post_cpu(heatmap, self.dataset.reverse_to_src_index, self.calibobj)
-                    show_com3d(img_preview, self.preview_ipannel, keypoints_xy_ba, keypoints_xy, self.vidout)
                     write_msg((iframe, 123, 456, 789))
                     write_msg(','.join([str(s) for s in [iframe, *keypoints_xyp.ravel()]]), 'com2d', with_date=False)
                     write_msg(','.join([str(s) for s in [iframe, *keypoints_xy_ba.ravel()]]), 'com2d_ba', with_date=False)
-                    # self.encode_array(iframe, img_next, keypoints_xyz_ba)
-                img_NCHW, img_preview = img_NCHW_next, img_preview_next
-
-        self.vidout.release()
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default=None)
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('--calibpkl', type=str, default=None)
     arg = parser.parse_args()
 
-    config, checkpoint, calibpkl = arg.config, arg.checkpoint, arg.calibpkl
-    assert config is not None
-    if checkpoint is None:
-        checkpoint = findcheckpoint_trt(config, trtnake='latest.full.engine')
-    print("config:", config)
+    checkpoint, calibpkl = arg.checkpoint, arg.calibpkl
     print("checkpoint:", checkpoint)
 
-    worker = MyWorker(config, rtsp_streams, checkpoint, calibpkl)
+    threading.Thread(target=serve_forever).start()
+    worker = MyWorker(rtsp_streams, checkpoint, calibpkl)
     worker.compute()
