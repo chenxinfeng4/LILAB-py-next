@@ -129,4 +129,4 @@ if __name__ == '__main__':
     assert osp.isdir(args.prj_imgfolder), "prj_imgfolder should be a folder"
     assert osp.isdir(osp.join(args.prj_imgfolder, '1')), "prj_imgfolder should contain subfolders"
     board_size = tuple(args.board_size)
-    calibrate_nview(args.prj_imgfolder)
+    calibrate_nview(args.prj_imgfolder, args.board_size)
