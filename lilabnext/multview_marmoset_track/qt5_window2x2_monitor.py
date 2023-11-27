@@ -14,7 +14,8 @@ import numpy as np
 is_recording = False
 is_realtime_com2d = False
 is_realtime_com3d = False
-rt_server_ip = '10.50.60.6'
+# rt_server_ip = '10.50.60.6'
+rt_server_ip = '10.50.5.83'
 rt_server_port = 8090
 
 caps = ['rtsp://admin:2019Cibr@10.50.5.252:8091/Streaming/Channels/102',
@@ -24,7 +25,6 @@ frames = [None for i in range(len(caps))]
 frames_lock = [threading.Lock() for i in range(len(caps))]
 camsize_wh = (640, 480)
 labels = []
-
 
 app = QApplication([])
 window = QMainWindow()
@@ -97,25 +97,34 @@ class ImageLabel(QLabel):
         self.anno_box_wh = 10
         self.painter = QPainter(parent)
         self.point = (100,100)
+        self.point_ba = (100,100)
     
-    def update_point(self, x, y):
+    def update_point(self, x, y, xba, yba):
         self.point = (x, y)
+        self.point_ba = (xba, yba)
         self.update()
 
     def paintEvent(self, event):
         super().paintEvent(event)
-        self.painter.begin(self) # 开始绘制
-        self.painter.setPen(QPen(Qt.red, 2)) # 设置绘图的颜色和线宽
         w = h = int(self.anno_box_wh)
-        x, y = np.array(self.point).astype(int) - int(w//2)
-        self.painter.drawRect(x, y, w, h) # 绘制方框
+        self.painter.begin(self) # 开始绘制
+        if is_realtime_com2d:
+            self.painter.setPen(QPen(Qt.red, 2)) # 设置绘图的颜色和线宽
+            x, y = np.array(self.point).astype(int) - int(w//2)
+            self.painter.drawRect(x, y, w, h) # 绘制方框
+        if is_realtime_com3d:
+            self.painter.setPen(QPen(Qt.green,2))
+            xba, yba = np.array(self.point_ba).astype(int) - int(w//2)
+            self.painter.drawEllipse(xba, yba, w, h) # 绘制圆
         self.painter.end()  # 结束绘制
 
 class My_Thread_realtime_com2d(QThread):
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.send_data = 'com2d'
+        self.send_data_ba = 'com2d_ba'
+
     def run(self):
-        send_data = 'com2d'
         thr = 0.4
         fps = 25
         tcp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -123,13 +132,19 @@ class My_Thread_realtime_com2d(QThread):
         print('ready print')
         while is_realtime_com2d:
             time.sleep(1/fps)
-            result = send_read(tcp_socket, send_data)
+            result = send_read(tcp_socket, self.send_data)
             if not len(result): continue
             iframe, *xypoints = [float(f) for f in result.strip().split(',')]
             points_n_xyp = np.array(xypoints).reshape(-1, 3)
-            for label, (x, y, p) in zip(labels, points_n_xyp):
-                if p<=thr: continue
-                label.update_point(x, y)
+            if is_realtime_com3d:
+                result_ba = send_read(tcp_socket, self.send_data_ba)
+                iframe, *xypoints_ba = [float(f) for f in result_ba.strip().split(',')]
+                points_n_xyp_ba = np.array(xypoints_ba).reshape(-1, 3)
+            else:
+                points_n_xyp_ba = points_n_xyp*0
+            for label, (x,y,p), (x2,y2,p2) in zip(labels, points_n_xyp, points_n_xyp_ba):
+                if p<=thr and p2<=thr: continue
+                label.update_point(x, y, x2, y2)
         tcp_socket.close()
 
 
@@ -144,7 +159,11 @@ def realtime_com2d():
         threading.Thread(target=my_thread.start).start()
 
 def realtime_com3d():
-    pass
+    global is_realtime_com3d
+    if is_realtime_com3d:
+        return
+    else:
+        is_realtime_com3d = True
 
 def realtime_stop():
     global is_realtime_com2d

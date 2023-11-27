@@ -126,9 +126,17 @@ class MyWorker:
                 heatmap = heatmap_wait
                 if iframe>-1: 
                     keypoints_xyz_ba, keypoints_xy_ba, keypoints_xy, keypoints_xyp = post_cpu(heatmap, self.dataset.reverse_to_src_index, self.calibobj)
-                    write_msg((iframe, 123, 456, 789))
+                    keypoints_xyz_ba = keypoints_xyz_ba.ravel()
+                    if not np.isnan(keypoints_xyz_ba[0]):
+                        write_msg(','.join([str(s) for s in [iframe, *keypoints_xyz_ba]]), 'com3d', with_date=True)
+                        keypoints_xy_ba = np.squeeze(keypoints_xy_ba)
+                        keypoints_p_ba = np.zeros((len(keypoints_xy), 1),dtype=keypoints_xy_ba.dtype) + 1
+                        keypoints_xyp_ba = np.concatenate((keypoints_xy_ba, keypoints_p_ba), axis=1)
+                        keypoints_xyp_ba[np.isnan(keypoints_xyp_ba[:,0])] = 0
+                        keypoints_xyp_ba=np.round(keypoints_xyp_ba, 1)
+                        write_msg(','.join([str(s) for s in [iframe, *keypoints_xyp_ba.ravel()]]), 'com2d_ba', with_date=False)
+
                     write_msg(','.join([str(s) for s in [iframe, *keypoints_xyp.ravel()]]), 'com2d', with_date=False)
-                    write_msg(','.join([str(s) for s in [iframe, *keypoints_xy_ba.ravel()]]), 'com2d_ba', with_date=False)
 
 
 if __name__ == '__main__':
