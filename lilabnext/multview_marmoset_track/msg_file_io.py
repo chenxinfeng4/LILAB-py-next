@@ -26,6 +26,10 @@ def read_com2d_ba():
     return read_msg('com2d_ba')
 
 def write_calibpkl_msg(ba_poses:dict):
+    for k in ba_poses:
+        for kk in ba_poses[k]:
+            if isinstance(ba_poses[k][kk], list): continue
+            ba_poses[k][kk] = ba_poses[k][kk].tolist()
     write_msg(json.dumps(ba_poses), file_key='ba_poses', with_date=False)
 
 def read_calibpkl_msg():

@@ -1,8 +1,8 @@
 #%% 2A. 从头开始，视频抽帧，打标
 # f1.mp4 2.mp4 3.mp4 改下面文件夹名和文件名
-project_ball_calib=/mnt/liying.cibr.ac.cn_Data_Temp/marmoset_camera3_cxf/2023-11-22-calib
+project_ball_calib=/mnt/liying.cibr.ac.cn_Data_Temp/marmoset_camera3_cxf/2023-11-27-calib
 cd $project_ball_calib
-marmoset_video='2023-11-16_16-19-43_cam'
+marmoset_video='2023-11-27_19-35-01_cam'
 
 ls $marmoset_video*.mp4 | xargs -n 1 python -m lilab.cvutils_new.extract_frames --npick 100
 mv outframes/ ball_frames/

@@ -20,6 +20,7 @@ from .video_set_reader import StreamRTSetReader
 from .msg_file_io import write_msg, write_calibpkl_msg
 from lilabnext.multview_marmoset_track.t1c_realtime_position_daemon_socket import serve_forever
 from ffmpegcv.ffmpeg_noblock import ReadLiveLast
+import pickle
 
 gpu_id = 0
 
@@ -33,7 +34,6 @@ rtsp_streams = ['rtsp://admin:2019Cibr@10.50.5.252:8091/Streaming/Channels/102',
 
 
 def post_cpu(heatmap, reverse_to_src_index, calibobj:CalibPredict):
-    assert calibobj is not None
     keypoints_xy_origin, keypoints_p = get_max_preds_gpu(heatmap)
     keypoints_xy = reverse_to_src_index(keypoints_xy_origin) #nview,nanimal,2
     keypoints_p = np.squeeze(keypoints_p) #nview,nanimal
@@ -44,6 +44,7 @@ def post_cpu(heatmap, reverse_to_src_index, calibobj:CalibPredict):
     keypoints_xy[indmiss] = np.nan
 
     # ba
+    assert calibobj is not None
     keypoints_xyz_ba = calibobj.p2d_to_p3d(keypoints_xy)  #nanimal, 3
     isnan = np.isnan(keypoints_xyz_ba)
     if np.any(isnan):
@@ -80,10 +81,16 @@ class MyWorker:
         super().__init__()
         self.cuda = getattr(self, 'cuda', gpu_id)
         self.checkpoint = checkpoint
-        self.calibobj = CalibPredict(ballcalib) if ballcalib else None
-        write_calibpkl_msg(self.calibobj.poses)
+        if ballcalib:
+            ballcalibdata = pickle.load(open(ballcalib, 'rb'))
+            ba_poses = {i: ballcalibdata['ba_poses'][i] for i in range(len(rtsp_streams))}
+            intrinsics = {i: ballcalibdata['intrinsics'][i] for i in range(len(rtsp_streams))}
+            self.calibobj = CalibPredict({'ba_poses': ba_poses, 'intrinsics': intrinsics})
+            write_calibpkl_msg(self.calibobj.poses)
+        else:
+            self.calibobj = None
+
         camsize = (640,480)
-        
         preview_ipannel = 0
         self.preview_ipannel = preview_ipannel
         vid = StreamRTSetReader(rtsp_streams, camsize_wh=camsize, pix_fmt='rgb24')

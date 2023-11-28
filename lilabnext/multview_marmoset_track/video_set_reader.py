@@ -125,22 +125,39 @@ class VideoSetCanvasReader(FFmpegReader):
         self.fps = self.vid_list[0].fps
         self.pannel_width = self.vid_list[0].width
         self.pannel_height = self.vid_list[0].height
-        self.origin_width = self.pannel_width * 3
-        self.origin_height = self.pannel_height * 1
+        if nvideo==3:
+            self.origin_width = self.pannel_width * 3
+            self.origin_height = self.pannel_height * 1
+        elif nvideo==4:
+            self.origin_width = self.pannel_width * 2
+            self.origin_height = self.pannel_height * 2
         self.count = min([len(vid) for vid in self.vid_list])
         assert set([vid.fps for vid in self.vid_list])=={self.fps}, 'fps not same'
         self.width, self.height = resize if resize else (self.origin_width, self.origin_height)
         for vid in self.vid_list:
             vid.release()
         resize_opt = f'[origin],[origin]scale={resize[0]}:{resize[1]}' if resize else ''
-        self.ffmpeg_cmd = (
-            f'ffmpeg -loglevel warning '
-            f' -i {video_files[0]} -i {video_files[1]} -i {video_files[2]} '
-            f' -filter_complex "'
-            '[0:v][1:v][2:v]xstack=inputs=3:layout=0_0|w0_0|w0+w0_0'
-            f'{resize_opt}" '
-            f' -pix_fmt {pix_fmt} -r {self.fps} -f rawvideo pipe:'
-        )
+        if nvideo==3:
+            self.ffmpeg_cmd = (
+                f'ffmpeg -loglevel warning '
+                f' -i {video_files[0]} -i {video_files[1]} -i {video_files[2]} '
+                f' -filter_complex "'
+                '[0:v][1:v][2:v]xstack=inputs=3:layout=0_0|w0_0|w0+w0_0'
+                f'{resize_opt}" '
+                f' -pix_fmt {pix_fmt} -r {self.fps} -f rawvideo pipe:'
+            )
+        elif nvideo==4:
+            self.ffmpeg_cmd = (
+                f'ffmpeg -loglevel warning '
+                f' -i {video_files[0]} -i {video_files[1]} -i {video_files[2]} -i {video_files[3]}'
+                f' -filter_complex "'
+                '[0:v][1:v][2:v][3:v]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0'
+                f'{resize_opt}" '
+                f' -pix_fmt {pix_fmt} -r {self.fps} -f rawvideo pipe:'
+            )
+        else:
+            raise ValueError('nvideo must be 3 or 4')
+        
         self.out_numpy_shape = {
             "rgb24": (self.height, self.width, 3),
             "bgr24": (self.height, self.width, 3),

@@ -16,7 +16,9 @@ thr = 0.4
 
 pred_colors = [[233,195,120],[0,0,255],[0,215,255]] #BGR
 ba_colors = [[0,255,0],[234,100,202],[255,255,0]]
-resize = (int(640*3), 480)
+# resize = (int(640*3), 480)
+# resize = (int(640*2), int(480*2))
+resize = None
 axis_length = 220  # length of axis (mm)
 
 
@@ -27,10 +29,19 @@ def load_mat(matfile):
     if False:
         views_xywh = data['views_xywh']
     else:
-        views_xywh = [[0,0,640,480], [640,0,640,480], [1280,0,640,480]]
+        views_xywh = [[0,0,640,480], [640,0,640,480], [0,480,640,480], [640,480,640,480]]
     keypoints = data['keypoints']
     indmiss = keypoints[:, :, :, 2] < thr
     keypoints_xy = keypoints[:, :, :, :2]  # (nview, times, nkeypoints, 2)
+    nview = len(views_xywh)
+
+    if False:
+        views_xywh = data['views_xywh']
+    elif nview==4:
+        views_xywh = [[0,0,640,480], [640,0,640,480], [0,480,640,480], [640,480,640,480]]
+    elif nview==3:
+        views_xywh = [[0,0,640,480], [640,0,640,480], [1280,0,640,480]]
+    
     keypoints_xy[indmiss] = np.nan
     keypoints_xy_ba = data['keypoints_xy_ba'] if len(data.get('keypoints_xy_ba', [])) else keypoints_xy+np.nan
     keypoints_xyz_ba = data['keypoints_xyz_ba'] if len(data.get('keypoints_xyz_ba', [])) else np.ones((keypoints_xy.shape[1], keypoints_xy.shape[2],3))+np.nan
@@ -54,13 +65,14 @@ def get_axis_line(calibPredict: CalibPredict, views_xywh:list):
     crop_xywh_np = np.array(views_xywh)     # (nview, 4)
     axis_points_recentor_xy += crop_xywh_np[:, None, :2]
     w, h = (crop_xywh_np[:, :2] + crop_xywh_np[:, 2:]).max(axis=0)
-    resize_ratio = np.array([resize[0]/w, resize[1]/h])
+    resize_ = (w, h) if resize is None else resize
+    resize_ratio = np.array([resize_[0]/w, resize_[1]/h])
     axis_points_recentor_xy *= resize_ratio[None, None, :]
     axis_points_recentor_xy[np.isnan(axis_points_recentor_xy)] = 0
     axis_points_recentor_xy = axis_points_recentor_xy.astype(int)
     nview = len(crop_xywh_np)
     def plot_axis_line(img:np.ndarray):
-        assert img.shape[:2][::-1] == resize
+        assert img.shape[:2][::-1] == resize_
         for i in range(nview):
             image_points = axis_points_recentor_xy[i]
             origin_point = tuple(image_points[0].ravel())
@@ -81,7 +93,8 @@ def keypoint_to_video(keypoints_xy, keypoints_xy_ba, keypoints_xyz_ba, data, fun
     # vin = ffmpegcv.noblock(ffmpegcv.VideoCaptureNV, vfile, resize=resize, resize_keepratio=False, gpu=gpu)
     assert len(vin) == keypoints_xy.shape[1]
     orisize = (vin.origin_width, vin.origin_height)
-    scale = (resize[0]/orisize[0], resize[1]/orisize[1])
+    resize_ = orisize if resize is None else resize
+    scale = (resize_[0]/orisize[0], resize_[1]/orisize[1])
 
     keypoints_xy[..., 0] *= scale[0]
     keypoints_xy[..., 1] *= scale[1]
@@ -103,14 +116,15 @@ def keypoint_to_video(keypoints_xy, keypoints_xy_ba, keypoints_xyz_ba, data, fun
     # %%
     vout = ffmpegcv.VideoWriter(vfile.replace('.mp4', '_keypoints1.mp4'), codec='h264', fps=vin.fps)
     for i, frame in enumerate(tqdm.tqdm(vin)):
-        fun_plot_axis_line(frame)
+        # fun_plot_axis_line(frame)
         draw_point_color(frame, keypoints_xy, i, pred_colors, 5)
         draw_point_color(frame, keypoints_xy_ba, i, ba_colors, 3)
         if True:
             frame = cv2.putText(frame, str(i), (50,50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0,0,255), 2)
             key_xyz = keypoints_xyz_ba[i][0]
             if np.all(~np.isnan(key_xyz)):
-                key_xyz_str = '{:4.1f},{:4.1f},{:4.1f}'.format(key_xyz[0], key_xyz[1], key_xyz[2])
+                # key_xyz_str = '{:4.1f},{:4.1f},{:4.1f}'.format(key_xyz[0], key_xyz[1], key_xyz[2])
+                key_xyz_str = '{:4.2f},{:4.2f},{:4.2f}'.format(key_xyz[0], key_xyz[1], key_xyz[2])
                 frame = cv2.putText(frame, key_xyz_str, (10,350), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0,0,255), 2)
         vout.write(frame)
     vout.release()

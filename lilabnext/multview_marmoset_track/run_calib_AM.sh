@@ -1,14 +1,17 @@
 #%% 1. 从头开始，矫正内参
 # intrin1.mp4 2.mp4 3.mp4
-project_ball_calib=/mnt/liying.cibr.ac.cn_Data_Temp/marmoset_camera3_cxf/2023-11-22-calib
+conda activate mmdet
+project_ball_calib=/mnt/liying.cibr.ac.cn_Data_Temp/marmoset_camera3_cxf/2023-11-27-calib
 cd $project_ball_calib
 
-ls checkboard_move*.mp4 | xargs -n 1 python -m lilab.cvutils_new.extract_frames --npick 100
+checkboard_move_mp4=`ls checkboard_move_cam*.mp4`
+echo "$checkboard_move_mp4" | xargs -n 1 -P 0 python -m lilab.cvutils_new.extract_frames --npick 100
+ncam=`echo "$checkboard_move_mp4" | sort -r | sed -n '1 s/.*cam\([1-9]\).mp4/\1/p'`
 
-mkdir -p intrinsic_calib_frames/{0,1,2}
-mv outframes/checkboard_move_cam1*.jpg intrinsic_calib_frames/0
-mv outframes/checkboard_move_cam2*.jpg intrinsic_calib_frames/1
-mv outframes/checkboard_move_cam3*.jpg intrinsic_calib_frames/2
+for ((i=0; i<=$ncam-1; i++)); do
+    mkdir -p intrinsic_calib_frames/$i 
+    mv outframes/checkboard_move_cam$((i+1))*.jpg intrinsic_calib_frames/$i
+done
 rm -r outframes
 
 python -m lilabnext.multview_marmoset_track.intrinsic_utils intrinsic_calib_frames/ --board_size 11 8
@@ -21,7 +24,7 @@ mv outframes/ ball_frames/
 
 #打开LABELME 打标小球，Open Dir，选择ball_640x480_20231124_marmosetcam文件夹，右键create point...全部结束后直接关闭，改下面ball_640x480_20231124日期， 执行
 rm `comm -3 <(ls -1 ball_frames/*.jpg | sort) <(ls -1 ball_frames/*.json | sed s/json/jpg/ | sort)`
-project_nake_name=ball_640x480_20231124_marmosetcam
+project_nake_name=ball_640x480_20231127_marmosetcam
 mv ball_frames $project_nake_name
 python -m lilab.cvutils.labelme_to_cocokeypoints_ball $project_nake_name
 python -m lilab.cvutils.coco_split -s 0.9 ${project_nake_name}_trainval.json
@@ -49,16 +52,22 @@ trtexec --onnx=work_dirs/${mfile_nake}/latest.full.onnx \
     --workspace=3072 --optShapes=input_1:4x3x480x640 \
     --minShapes=input_1:1x3x480x640 --maxShapes=input_1:6x3x480x640
 
-#%% 2B. 外参矫正 确认文件名
+#%% 2B. 外参矫正 确认文件名   setupname(david), ncam(3)   setupname(eva), ncam(4)
 cd $project_ball_calib
 vfile=ball_move_cam1
 mfile='res50_coco_ball_640x480.py'
 vfile_checkboard='checkboard_global2_cam1'
+setupname=eva
+ncam=4
+
+# setupname(david), ncam(3)
+# setupname(eva), ncam(4)
+
 python -m lilabnext.multview_marmoset_track.s1_ballvideo2matpkl_full_faster \
-    --pannels 3 --config /home/liying_lab/chenxinfeng/DATA/mmpose/$mfile  $vfile.mp4
+    --pannels $ncam --config /home/liying_lab/chenxinfeng/DATA/mmpose/$mfile  $vfile.mp4
 
 python -m lilabnext.multview_marmoset_track.s5_show_calibpkl2video $vfile.matpkl
-setupname=david
+
 python -m lilabnext.multiview_zyy.p1_checkboard_global $vfile_checkboard.mp4 --setupname $setupname --board_size 11 8 --square_size 20
 
 tball=" 0 0 0 0 10 " # 没有用，只是占位
@@ -74,3 +83,9 @@ python -m lilabnext.multview_marmoset_track.s5_show_calibpkl2video $vfile.matcal
 
 # 7. 确定无误后，替换原来的 calibpkl
 mv $vfile.recalibpkl $vfile.calibpkl
+
+# 8. [可选项] 以最后一个相机作为怼脸相机，设置align 坐标系
+python -m lilabnext.multview_marmoset_track.a0_calibpkl_align_cam $vfile.calibpkl --rescale 0.001
+
+python -m lilab.multiview_scripts_dev.s4_matpkl2matcalibpkl $vfile.matpkl $vfile.aligncalibpkl
+python -m lilabnext.multview_marmoset_track.s5_show_calibpkl2video $vfile.matcalibpkl

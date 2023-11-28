@@ -19,7 +19,7 @@ board_size = (11, 8)
 square_size = 20.0
 
 # %%
-def convert(vfile, setupname, board_size, square_size):
+def convert(vfile, setupname, board_size, square_size, zaxis_out):
     intrinces_dict = get_json_wrapper(setupname)[1]
     nview = len(intrinces_dict)
     vid = VideoSetReader(vfile, nvideo=nview)
@@ -39,6 +39,8 @@ def convert(vfile, setupname, board_size, square_size):
     # set axix origin point in the centor
     object_corners[:, 0] -= (board_size[0]//2)*square_size
     object_corners[:, 1] -= (board_size[1]//2)*square_size
+    if zaxis_out:
+        object_corners[:, 0] *= -1
 
     keypoint_xy = np.ones((len(img_crop_l), board_size[0]*board_size[1], 2), float) * np.nan
 
@@ -118,9 +120,10 @@ if __name__ == '__main__':
     parser.add_argument('--setupname', type=str, default='bob')
     parser.add_argument('--board_size', type=int, nargs='+', default=board_size)
     parser.add_argument('--square_size_mm', type=float, default=square_size)
+    parser.add_argument('--zaxis-out', action='store_true', help='Z axis outemit is positive. Default false.')
     args = parser.parse_args()
     assert len(args.board_size) == 2, "board_size should be 2 elements"
     assert sum(args.board_size) % 2 == 1, "board size should be (even, odd) or (odd, even)"
 
     assert osp.isfile(args.video_path)
-    convert(args.video_path, args.setupname, tuple(args.board_size), args.square_size_mm)
+    convert(args.video_path, args.setupname, tuple(args.board_size), args.square_size_mm, args.zaxis_out)

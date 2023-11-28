@@ -10,6 +10,8 @@ import datetime
 import time
 import socket
 import numpy as np
+from functools import partial
+
 
 is_recording = False
 is_realtime_com2d = False
@@ -20,7 +22,9 @@ rt_server_port = 8090
 
 caps = ['rtsp://admin:2019Cibr@10.50.5.252:8091/Streaming/Channels/102',
         'rtsp://admin:2019Cibr@10.50.5.252:8092/Streaming/Channels/102',
-        'rtsp://admin:2019Cibr@10.50.5.252:8093/Streaming/Channels/102']
+        'rtsp://admin:2019Cibr@10.50.5.252:8093/Streaming/Channels/102',
+        'rtsp://admin:2019Cibr@10.50.5.252:8080/Streaming/Channels/102']
+
 frames = [None for i in range(len(caps))]
 frames_lock = [threading.Lock() for i in range(len(caps))]
 camsize_wh = (640, 480)
@@ -76,14 +80,7 @@ def record_which(i: int):
         my_thread.start()
         print(f"录制{i}被点击")
 
-def record_1():
-    record_which(1)
 
-def record_2():
-    record_which(2)
-
-def record_3():
-    record_which(3)
 
 def stop():
     global is_recording
@@ -96,8 +93,8 @@ class ImageLabel(QLabel):
         super().__init__(parent)
         self.anno_box_wh = 10
         self.painter = QPainter(parent)
-        self.point = (100,100)
-        self.point_ba = (100,100)
+        self.point = (0,0)
+        self.point_ba = (0,0)
     
     def update_point(self, x, y, xba, yba):
         self.point = (x, y)
@@ -194,17 +191,10 @@ def create_menu():
     action_record_all.triggered.connect(record_all)
     menu_record.addAction(action_record_all)
 
-    action_record_1 = QAction('录制1', window)
-    action_record_1.triggered.connect(record_1)
-    menu_record.addAction(action_record_1)
-
-    action_record_2 = QAction('录制2', window)
-    action_record_2.triggered.connect(record_2)
-    menu_record.addAction(action_record_2)
-
-    action_record_3 = QAction('录制3', window)
-    action_record_3.triggered.connect(record_3)
-    menu_record.addAction(action_record_3)
+    for i in range(len(caps)):
+        action_record_i = QAction('录制' + str(i + 1), window)
+        action_record_i.triggered.connect(partial(record_which, i))
+        menu_record.addAction(action_record_i)
 
     action_stop = QAction('停止', window)
     action_stop.triggered.connect(stop)
