@@ -9,7 +9,7 @@ mv outframes/ ball_frames/
 
 # 用 labelme 打标，结束后执行下面
 rm `comm -3 <(ls -1 ball_frames/*.jpg | sort) <(ls -1 ball_frames/*.json | sed s/json/jpg/ | sort)`
-project_nake_name=toy_640x480_20231124_marmosetcam
+project_nake_name=toy_640x480_20231127_marmosetcam
 mv ball_frames $project_nake_name
 python -m lilab.cvutils.labelme_to_cocokeypoints_ball $project_nake_name
 python -m lilab.cvutils.coco_split -s 0.9 ${project_nake_name}_trainval.json
@@ -27,7 +27,7 @@ echo $mfile        #然后 ctrl + 鼠标左键，进入res50_coco_ball_640x480.p
 conda activate mmpose
 python tools/train.py $mfile
 
-# 模型文件转化为 onnx， tensorrt。提升推断速度
+# 模型文件转化为 onnx， tensorrt。提升推断速度       ----31行常有报错
 python -m lilab.mmpose_dev.a2_convert_mmpose2onnx $mfile --full --dynamic
 conda activate mmdet
 trtexec --onnx=work_dirs/${mfile_nake}/latest.full.onnx \
@@ -39,8 +39,8 @@ trtexec --onnx=work_dirs/${mfile_nake}/latest.full.onnx \
 #%% 深度学习预测 toy 位置  改文件名
 setupname=david
 config='/home/liying_lab/chenxinfeng/DATA/mmpose/res50_coco_toy_640x480.py'
-vfile=`w2l "\\liying.cibr.ac.cn\Data_Temp\Chenxinfeng\marmoset_camera3_cxf\2023-11-22-calib\2023-11-16_16-19-43_cam1"`
-calibpkl=`w2l "\\liying.cibr.ac.cn\Data_Temp\Chenxinfeng\marmoset_camera3_cxf\2023-11-22-calib\ball_move_cam1.calibpkl"`
+vfile=`w2l "\\liying.cibr.ac.cn\Data_Temp\Chenxinfeng\marmoset_camera3_cxf\2023-11-27-calib\2023-11-27_19-35-01_cam1"`
+calibpkl=`w2l "\\liying.cibr.ac.cn\Data_Temp\Chenxinfeng\marmoset_camera3_cxf\2023-11-27-calib\ball_move_cam1.calibpkl"`
 # python -m lilabnext.multiview_zyy.s1_ballvideo2matpkl_full_faster $vfile.mp4 --pannels $setupname --config  $config #<深度学习>
 
 
