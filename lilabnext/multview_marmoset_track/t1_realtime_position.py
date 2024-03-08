@@ -28,9 +28,9 @@ gpu_id = 0
 def show_com3d(*args):
     pass
 
-rtsp_streams = ['rtsp://admin:2019Cibr@10.50.5.252:8091/Streaming/Channels/102',
-                'rtsp://admin:2019Cibr@10.50.5.252:8092/Streaming/Channels/102',
-                'rtsp://admin:2019Cibr@10.50.5.252:8093/Streaming/Channels/102']
+rtsp_streams = ['rtsp://admin:2019Cibr@10.50.4.130:8091/Streaming/Channels/102',
+                'rtsp://admin:2019Cibr@10.50.4.130:8092/Streaming/Channels/102',
+                'rtsp://admin:2019Cibr@10.50.4.130:8093/Streaming/Channels/102']
 
 
 def post_cpu(heatmap, reverse_to_src_index, calibobj:CalibPredict):

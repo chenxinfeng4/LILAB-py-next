@@ -131,6 +131,9 @@ class VideoSetCanvasReader(FFmpegReader):
         elif nvideo==4:
             self.origin_width = self.pannel_width * 2
             self.origin_height = self.pannel_height * 2
+        elif nvideo==6:
+            self.origin_width = self.pannel_width * 3
+            self.origin_height = self.pannel_height * 2
         self.count = min([len(vid) for vid in self.vid_list])
         assert set([vid.fps for vid in self.vid_list])=={self.fps}, 'fps not same'
         self.width, self.height = resize if resize else (self.origin_width, self.origin_height)
@@ -152,6 +155,17 @@ class VideoSetCanvasReader(FFmpegReader):
                 f' -i {video_files[0]} -i {video_files[1]} -i {video_files[2]} -i {video_files[3]}'
                 f' -filter_complex "'
                 '[0:v][1:v][2:v][3:v]xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0'
+                f'{resize_opt}" '
+                f' -pix_fmt {pix_fmt} -r {self.fps} -f rawvideo pipe:'
+            )
+        elif nvideo==6:
+            self.ffmpeg_cmd = (
+                f'ffmpeg -loglevel warning '
+                f' -i {video_files[0]} -i {video_files[1]} -i {video_files[2]}'
+                f' -i {video_files[3]} -i {video_files[4]} -i {video_files[5]}'
+                f' -filter_complex "'
+                '[0:v][1:v][2:v][3:v][4:v][5:v]xstack=inputs=6:'
+                'layout=0_0|w0_0|w0+w0_0|0_h0|w0_h0|w0+w0_h0 '
                 f'{resize_opt}" '
                 f' -pix_fmt {pix_fmt} -r {self.fps} -f rawvideo pipe:'
             )

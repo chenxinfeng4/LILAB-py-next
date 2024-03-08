@@ -4,6 +4,11 @@ import socketserver
 from .msg_file_io import read_msg, read_calibpkl_msg, read_com2d, read_com2d_ba
 
 HOST, PORT = "0.0.0.0", 8090
+number_of_connections = 0
+
+def get_number_of_connections():
+    return number_of_connections
+
 
 def greeting():
     msg = 'Welcome to the marmoset tracker!\n'
@@ -37,7 +42,8 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         # self.request is the TCP socket connected to the client
-
+        global number_of_connections
+        number_of_connections += 1
         print("conn is :",self.request) # conn
         print("addr is :",self.client_address) # addr
  
@@ -70,6 +76,7 @@ class MyTCPHandler(socketserver.BaseRequestHandler):
             print('ConnectionResetError')
         except Exception as e:
             print(e)
+        number_of_connections -= 1
         print('Closed a request')
 
 def serve_forever():

@@ -1,5 +1,6 @@
 import datetime
 import json
+import copy
 
 files = {'com2d': '',
         'com2d_ba': '',
@@ -26,6 +27,7 @@ def read_com2d_ba():
     return read_msg('com2d_ba')
 
 def write_calibpkl_msg(ba_poses:dict):
+    ba_poses = copy.deepcopy(ba_poses)
     for k in ba_poses:
         for kk in ba_poses[k]:
             if isinstance(ba_poses[k][kk], list): continue

@@ -12,7 +12,7 @@ from .video_set_reader import VideoSetCanvasReader
 
 
 matfile = '/mnt/liying.cibr.ac.cn_Data_Temp/multiview-large/wtxwt_social/ball/2022-04-29_17-58-45_ball.matcalibpkl'
-thr = 0.4
+thr = 0.7
 
 pred_colors = [[233,195,120],[0,0,255],[0,215,255]] #BGR
 ba_colors = [[0,255,0],[234,100,202],[255,255,0]]
@@ -26,21 +26,20 @@ def load_mat(matfile):
     print("Loading {}".format(matfile))
     data = pickle.load(open(matfile, 'rb'))
 
-    if False:
-        views_xywh = data['views_xywh']
-    else:
-        views_xywh = [[0,0,640,480], [640,0,640,480], [0,480,640,480], [640,480,640,480]]
-    keypoints = data['keypoints']
-    indmiss = keypoints[:, :, :, 2] < thr
-    keypoints_xy = keypoints[:, :, :, :2]  # (nview, times, nkeypoints, 2)
-    nview = len(views_xywh)
 
+    nview = len(data['views_xywh'])
     if False:
         views_xywh = data['views_xywh']
     elif nview==4:
         views_xywh = [[0,0,640,480], [640,0,640,480], [0,480,640,480], [640,480,640,480]]
     elif nview==3:
         views_xywh = [[0,0,640,480], [640,0,640,480], [1280,0,640,480]]
+    elif nview==6:
+        from lilab.cameras_setup import get_view_xywh_wrapper
+        views_xywh = get_view_xywh_wrapper('frank')
+    keypoints = data['keypoints']
+    indmiss = keypoints[:, :, :, 2] < thr
+    keypoints_xy = keypoints[:, :, :, :2]  # (nview, times, nkeypoints, 2)
     
     keypoints_xy[indmiss] = np.nan
     keypoints_xy_ba = data['keypoints_xy_ba'] if len(data.get('keypoints_xy_ba', [])) else keypoints_xy+np.nan

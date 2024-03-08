@@ -15,6 +15,8 @@ done
 rm -r outframes
 
 python -m lilabnext.multview_marmoset_track.intrinsic_utils intrinsic_calib_frames/ --board_size 11 8
+setupname=frank #
+python -m lilab.cameras_setup.register_setup_intrinsics intrinsic_calib_frames/intrinsics_calib.json $setupname
 #'将内参的 intrinsic_calib_frames/intrinsics_calib.json 拷贝到 lilab/cameras_setup/_get_calibinfo.py'
 
 #%% 2A. 从头开始，视频抽帧，打标
