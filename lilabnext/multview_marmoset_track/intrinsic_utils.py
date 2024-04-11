@@ -48,8 +48,12 @@ def calibration(imageFolder, board_size):
             cv2.imwrite(osp.join(outdir, osp.basename(fname)), img)
 
     # 计算相机内参
+    # ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], 
+    #                                                 None, None, flags=cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST)
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], 
-                                                    None, None, flags=cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST)
+                                                    None, None, 
+                                                    flags=cv2.CALIB_FIX_K1|cv2.CALIB_FIX_K2|cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST)
+    
     print("相机内参矩阵：\n", mtx.astype(int))
     with np.printoptions(precision=3):
         print("相机失真参数：\n", dist.flatten())
@@ -76,12 +80,14 @@ def calibration(imageFolder, board_size):
         # 选取优质图片，并重新计算相机内参
         objpoints2 = [objpoints[i] for i in good_images]
         imgpoints2 = [imgpoints[i] for i in good_images]
-        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints2, imgpoints2, gray.shape[::-1], None, None)
-
-        print("相机内参矩阵：\n", mtx)
+        # ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints2, imgpoints2, gray.shape[::-1], None, None)
+        ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, gray.shape[::-1], 
+                                                    None, None, 
+                                                    flags=cv2.CALIB_FIX_K3 | cv2.CALIB_ZERO_TANGENT_DIST)
+        print("重计算相机内参矩阵：\n", mtx)
 
         with np.printoptions(precision=3):
-            print("相机失真参数：\n", dist.flatten())
+            print("重计算相机失真参数：\n", dist.flatten())
 
     # %%保存相机内参
     dist = dist.flatten()

@@ -18,9 +18,11 @@ def find_sibling_video(video_first_file, nvideo):
         raise ValueError('video_first_file should contain 0 or 1')
     
     last_index = video_first_file.rfind(str(start_from))
-    video_files = [video_first_file[:last_index]+str(i)+video_first_file[last_index+1:]
+    # video_files = [video_first_file[:last_index]+str(i)+video_first_file[last_index+1:]
+    #                 for i in range(start_from,nvideo+start_from)]
+    video_files = [osp.splitext(video_first_file)[0]+'_cam'+str(i+1)+'.mp4'
                     for i in range(start_from,nvideo+start_from)]
-    assert all(osp.exists(f) for f in video_files), 'video_first_file not exists'
+    assert all(osp.exists(f) for f in video_files), f'{video_files} video_first_file not exists'
     return video_files
 
 
