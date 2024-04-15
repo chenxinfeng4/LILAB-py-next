@@ -3,16 +3,21 @@ import numpy as np
 from lilabnext.multview_marmoset_track.a1_ptz_control import control_PTZF as ptzf_control
 from lilabnext.multiview_calib.focus_length import zf_interp_industry
 import time
-import socket
 import argparse
 import os.path as osp
 import lilabnext.multiview_marmoset_yolo_track.t1a_realtime_position_daemon_rpc as sockserver
+# from lilabnext.multiview_marmoset_yolo_track.t2a_f2sync_ptzf_record import log_deamond_start as a0
+import subprocess
 
-
-ptz_ip_port = ('10.50.4.130', '7094')
+ptz_ip_port = ('192.168.1.230', '80')
 baseline_ptz = (267.47, 60.76, 1.0)
-thr_move_x_y_z = np.array([0.12, 0.08, 0.1])
+thr_move_x_y_z = np.array([0.12, 0.05, 0.1])
 thr_move_xy = 0.15
+
+
+def log_deamond_start():
+    cmd = 'python -m lilabnext.multiview_marmoset_yolo_track.t2a_f2sync_ptzf_record'
+    return subprocess.Popen(cmd, shell=True)
 
 
 def PtzControl(ip:str, port:str, baseline_ptz:list, zf_interp_fun:callable):
@@ -81,11 +86,15 @@ if __name__=='__main__':
     zf_interp_fun = zf_interp_industry(args.zfmappkl)
 
     rpc_client = sockserver.create_client()
+    rpc_client.ptz_ip_port_list([args.ptz_ip_port])
+    rpc_client.ptz_baseline_list([args.baseline_ptz])
+    log_deamond_start()
     ptzControler = PtzControl(ip=ptz_ip, port=ptz_port, 
                               baseline_ptz=baseline_ptz, zf_interp_fun=zf_interp_fun)
     
     while True:
         iframe, object_p = rpc_client.com3d()
+        rpc_client.p3d_last(object_p)
         if False: #rotate_image_180
             axis_r = np.array([-1,-1,1], dtype=float)
             object_p = object_p * axis_r

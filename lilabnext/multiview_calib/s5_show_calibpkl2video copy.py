@@ -26,15 +26,16 @@ def load_mat(matfile):
 
 
     nview = len(data['views_xywh'])
-    if False:
-        views_xywh = data['views_xywh']
-    elif nview==4:
-        views_xywh = [[0,0,640,480], [640,0,640,480], [0,480,640,480], [640,480,640,480]]
-    elif nview==3:
-        views_xywh = [[0,0,640,480], [640,0,640,480], [1280,0,640,480]]
-    elif nview==6:
-        from lilab.cameras_setup import get_view_xywh_wrapper
-        views_xywh = get_view_xywh_wrapper('frank')
+    views_xywh = data['views_xywh']
+    # if False:
+    #     views_xywh = data['views_xywh']
+    # elif nview==4:
+    #     views_xywh = [[0,0,640,480], [640,0,640,480], [0,480,640,480], [640,480,640,480]]
+    # elif nview==3:
+    #     views_xywh = [[0,0,640,480], [640,0,640,480], [1280,0,640,480]]
+    # elif nview==6:
+    #     from lilab.cameras_setup import get_view_xywh_wrapper
+    #     views_xywh = get_view_xywh_wrapper('frank')
     keypoints = data['keypoints']
     indmiss = keypoints[:, :, :, 2] < thr
     keypoints_xy = keypoints[:, :, :, :2]  # (nview, times, nkeypoints, 2)

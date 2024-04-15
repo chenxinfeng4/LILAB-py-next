@@ -35,10 +35,7 @@ def convert(calibpkl:str, iviewalign:int=-1, rescale:float=1.0):
     pkldata=pickle.load(open(calibpkl,'rb'))
     ba_poses = pkldata['ba_poses']
     nview = max(ba_poses.keys()) + 1
-    if iviewalign >= nview:
-        raise ValueError('iviewalign is larger than nview')
-    else:
-        iviewalign = nview + iviewalign
+    iviewalign = np.arange(nview)[iviewalign]
 
     for k in ba_poses:
         for vk in ['R', 't']:

@@ -4,48 +4,32 @@ import numpy as np
 import tqdm
 import time
 import ffmpegcv
-from torch2trt.pycuda2trt import TRTModule
-import itertools
-from multiview_calib.calibpkl_predict import CalibPredict
-from lilab.multiview_scripts_dev.s1_ballvideo2matpkl_full_realtimecam import (
-    pre_cpu
-)
 import threading
+import itertools
+from torch2trt.pycuda2trt import TRTModule
+from lilab.multiview_scripts_dev.s1_ballvideo2matpkl_full_realtimecam import pre_cpu
 import lilabnext.multiview_marmoset_yolo_track.t1a_realtime_position_daemon_rpc as sockserver
-
 from ffmpegcv import ReadLiveLast
 import pickle
 
 from lilab.yolo_det.convert_pt2onnx import singleton
 
 camsize = (640,480)
+yolo_pthr = 0.4
 rtsp_streams = ['rtsp://admin:2019Cibr@192.168.1.142:554/Streaming/Channels/102',
                 'rtsp://admin:2019Cibr@192.168.1.137:554/Streaming/Channels/102',
                 'rtsp://admin:2019Cibr@192.168.1.141:554/Streaming/Channels/102',
                 'rtsp://admin:2019Cibr@192.168.1.103:554/Streaming/Channels/102',
                 'rtsp://admin:2019Cibr@192.168.1.143:554/Streaming/Channels/102']
 
-def post_cpu(outputs, reverse_to_src_index, calibobj:CalibPredict):
+
+def post_cpu(outputs, reverse_to_src_index):
     boxes, scores = singleton(outputs)
     boxes_center = (boxes[...,[0,1]] + boxes[...,[2,3]])/2
-    keypoints_xyp = np.concatenate((boxes_center, scores[...,None]), axis=-1) #(N, K, xyp)
-    keypoints_xy_origin, keypoints_p = boxes_center, scores
-    keypoints_xy = reverse_to_src_index(keypoints_xy_origin) #nview,nanimal,2
-    keypoints_p = np.squeeze(keypoints_p) #nview,nanimal
-    # thr
-    thr = 0.4
-    indmiss = keypoints_p < thr
-    keypoints_xy[indmiss] = np.nan
-
-    # ba
-    assert calibobj is not None
-    keypoints_xyz_ba = calibobj.p2d_to_p3d(keypoints_xy)  #nanimal, 3
-    isnan = np.isnan(keypoints_xyz_ba)
-    if np.any(isnan):
-        keypoints_xyz_ba[isnan] = calibobj.last_keypoints_xyz_ba[isnan]
-    calibobj.last_keypoints_xyz_ba = keypoints_xyz_ba
-    keypoints_xy_ba = calibobj.p3d_to_p2d(keypoints_xyz_ba) #nview, nanimal, 2
-    return keypoints_xyz_ba, keypoints_xy_ba, keypoints_xy, keypoints_xyp
+    keypoints_xy = reverse_to_src_index(boxes_center) #nview,nanimal,2
+    keypoints_p = np.squeeze(scores) #nview,nanimal
+    keypoints_xy[keypoints_p < yolo_pthr] = np.nan
+    return keypoints_xy
 
 
 def mid_gpu(trt_model, img_NCHW):
@@ -75,16 +59,12 @@ class DataSet:
             yield img_NCHW, img_preview
 
 
-def main(rtsp_streams:str, checkpoint:str, ballcalib:str, i_joint:int):
+def main(rtsp_streams:str, checkpoint:str, ballcalib:str, iclass:int):
     rpc_client = sockserver.create_client()
-    if ballcalib:
-        ballcalibdata = pickle.load(open(ballcalib, 'rb'))
-        ba_poses = {i: ballcalibdata['ba_poses'][i] for i in range(len(rtsp_streams))}
-        # intrinsics = {i: ballcalibdata['intrinsics'][i] for i in range(len(rtsp_streams))}
-        calibobj = CalibPredict({'ba_poses': ba_poses}) #, 'intrinsics': intrinsics
-        rpc_client.ba_poses(calibobj.poses)
-    else:
-        calibobj = None
+
+    ba_poses = pickle.load(open(ballcalib, 'rb'))['ba_poses']
+    rpc_client.ba_poses({i: ba_poses[i] for i in range(len(rtsp_streams))})
+    rpc_client.ba_poses_full(ba_poses)
 
     dataset = DataSet(rtsp_streams, camsize_wh=camsize, pix_fmt='rgb24')
     dataset.reverse_to_src_index = lambda x: x
@@ -105,7 +85,6 @@ def main(rtsp_streams:str, checkpoint:str, ballcalib:str, i_joint:int):
     img_NCHW = np.zeros(input_shape)
     outputs = mid_gpu(trt_model, img_NCHW)
     num_joints = outputs[1].shape[-1]
-    calibobj.last_keypoints_xyz_ba = np.ones((num_joints, 3))
 
     for iframe, _ in enumerate(tqdm.tqdm(count_range, desc='RT')):
         if sockserver.get_number_of_connections()<=1 and iframe % 100 != 0:
@@ -113,18 +92,8 @@ def main(rtsp_streams:str, checkpoint:str, ballcalib:str, i_joint:int):
             continue
         img_NCHW, img_preview = pre_cpu(dataset_iter)
         outputs = mid_gpu(trt_model, img_NCHW)
-        keypoints_xyz_ba, keypoints_xy_ba, keypoints_xy, keypoints_xyp = post_cpu(outputs, dataset.reverse_to_src_index, calibobj)
-        keypoints_xyz_ba, keypoints_xy_ba, keypoints_xy, keypoints_xyp = keypoints_xyz_ba[i_joint], keypoints_xy_ba[:,i_joint], keypoints_xy[:,i_joint], keypoints_xyp[:,i_joint]
-        keypoints_xyz_ba = keypoints_xyz_ba.ravel()
-        if not np.isnan(keypoints_xyz_ba[0]):
-            rpc_client.com3d([iframe, keypoints_xyz_ba])
-            keypoints_xy_ba = np.squeeze(keypoints_xy_ba)
-            keypoints_p_ba = np.zeros((len(keypoints_xy), 1),dtype=keypoints_xy_ba.dtype) + 1
-            keypoints_xyp_ba = np.concatenate((keypoints_xy_ba, keypoints_p_ba), axis=1)
-            keypoints_xyp_ba[np.isnan(keypoints_xyp_ba[:,0])] = 0
-            keypoints_xyp_ba=np.round(keypoints_xyp_ba, 1)
-            rpc_client.com2d_ba([iframe, keypoints_xyp_ba])
-        rpc_client.com2d([iframe, keypoints_xyp])
+        keypoints_xy = post_cpu(outputs, dataset.reverse_to_src_index)
+        rpc_client.process_p2d(keypoints_xy, iclass, iframe)
 
 
 if __name__ == '__main__':
@@ -132,12 +101,12 @@ if __name__ == '__main__':
     parser.add_argument('--checkpoint', type=str, default=None)
     parser.add_argument('--calibpkl', type=str, default=None)
     parser.add_argument('--createport', type=int, default=8090)
-    parser.add_argument('--ijoint', type=int, default=0)
-    arg = parser.parse_args()
+    parser.add_argument('--iclass', type=int, default=None)
+    args = parser.parse_args()
 
-    checkpoint, calibpkl = arg.checkpoint, arg.calibpkl
+    checkpoint, calibpkl = args.checkpoint, args.calibpkl
     print("checkpoint:", checkpoint)
 
-    sockserver.PORT = arg.createport
+    sockserver.PORT = args.createport
     threading.Thread(target=sockserver.serve_forever).start()
-    main(rtsp_streams, checkpoint, calibpkl, arg.ijoint)
+    main(rtsp_streams, checkpoint, calibpkl, args.iclass)
